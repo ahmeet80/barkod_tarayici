@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Çizgili Barkod Okuyucu</title>
-    <!-- Gelişmiş Çizgili Barkod Tarama Kütüphanesi -->
-    <script src="https://cloudflare.com"></script>
+    <title>Süper Hızlı Barkod Tarayıcı</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -19,7 +17,7 @@
         }
         h2 { color: #2c3e50; margin-bottom: 5px; }
         p { color: #7f8c8d; font-size: 14px; margin-top: 0; text-align: center; }
-        #interactive {
+        #video-container {
             width: 100%;
             max-width: 450px;
             background: #000;
@@ -28,19 +26,10 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             position: relative;
         }
-        /* Kütüphanenin oluşturduğu video elementini tam oturt */
-        #interactive video {
+        video {
             width: 100%;
             height: auto;
             display: block;
-        }
-        /* Kütüphanenin oluşturduğu ekstra tuvali gizle */
-        #interactive canvas.drawingBuffer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
         }
         #result-container {
             margin-top: 20px;
@@ -74,8 +63,8 @@
             text-decoration: none;
             border-radius: 6px;
             font-size: 14px;
+            text-align: center;
         }
-        /* Barkod hizalama kılavuzu */
         .scan-target {
             position: absolute;
             top: 50%;
@@ -92,87 +81,105 @@
 <body>
 
     <h2>Barkod Tarayıcı</h2>
-    <p>Ürün barkodunu yatay olacak şekilde kırmızı çizgiye hizalayın.</p>
+    <p>Barkodu veya QR kodu kırmızı çizgiye hizalayın.</p>
 
-    <!-- Kamera Alanı -->
-    <div id="interactive" class="viewport">
+    <!-- Kesin Açılan Yerleşik Kamera Sistemi -->
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
         <div class="scan-target"></div>
     </div>
 
     <!-- Sonuç Alanı -->
     <div id="result-container">
-        <div class="result-title">🟢 Okunan Barkod No:</div>
+        <div class="result-title">🟢 Okunan Sonuç:</div>
         <div id="result-text">Henüz tarama yapılmadı...</div>
         <div id="action-area"></div>
     </div>
 
     <script>
-        // Aynı kodun üst üste okunmasını engellemek için son okunanı tutuyoruz
         let lastResult = null;
+        let barcodeDetector;
 
-        function startQuagga() {
-            Quagga.init({
-                inputStream: {
-                    name: "Live",
-                    type: "LiveStream",
-                    target: document.querySelector('#interactive'),
-                    constraints: {
-                        width: 640,
-                        height: 480,
-                        facingMode: "environment" // Kesinlikle arka kamera
-                    },
-                },
-                locator: {
-                    patchSize: "medium",
-                    halfSample: true
-                },
-                numOfWorkers: 2,
-                // Türkiye ve dünyadaki tüm standart market/ürün barkod türleri (EAN, UPC, Code128)
-                decoder: {
-                    readers: [
-                        "ean_reader",
-                        "ean_8_reader",
-                        "code_128_reader",
-                        "upc_reader",
-                        "upc_e_reader"
-                    ]
-                },
-                locate: true
-            }, function(err) {
-                if (err) {
-                    console.error("Başlatma hatası:", err);
-                    return;
-                }
-                console.log("Barkod motoru hazır, tarama başlıyor...");
-                Quagga.start();
-            });
+        async function initScanner() {
+            const video = document.getElementById('webcam');
+            
+            // 1. ADIM: Tarayıcının yerleşik barkod tanıma motorunu kontrol et (Destek yoksa polyfill aç)
+            if (!('BarcodeDetector' in window)) {
+                // Eğer cihaz doğrudan desteklemiyorsa harici motoru dinamik olarak yükle
+                const script = document.createElement('script');
+                script.src = "https://jsdelivr.net";
+                document.head.appendChild(script);
+                script.onload = async () => {
+                    barcodeDetector = new window.BarcodeDetector.BarcodeDetector({
+                        formats: ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a']
+                    });
+                    startCamera(video);
+                };
+            } else {
+                barcodeDetector = new BarcodeDetector({
+                    formats: ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a']
+                });
+                startCamera(video);
+            }
+        }
 
-            // Barkod başarıyla tespit edildiğinde çalışacak fonksiyon
-            Quagga.onDetected(function(result) {
-                let code = result.codeResult.code;
-                
-                // Hatalı veya kaymış okumaları önlemek için kontrol
-                if (!code || lastResult === code) return;
-                
-                lastResult = code;
-                document.getElementById('result-text').innerText = code;
-                
-                // Sesli geri bildirim efekti (Bip sesi) alternatifi
-                if (navigator.vibrate) navigator.vibrate(100);
+        async function startCamera(video) {
+            try {
+                // 2. ADIM: Donanım seviyesinde kamerayı kesin olarak aç
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+                video.srcObject = stream;
 
-                let actionArea = document.getElementById('action-area');
-                actionArea.innerHTML = ''; 
+                // 3. ADIM: Kamera oynamaya başladığında tarama döngüsünü tetikle
+                video.addEventListener('playing', () => {
+                    setInterval(async () => {
+                        if (video.readyState === video.HAVE_CURRENT_DATA && barcodeDetector) {
+                            try {
+                                const barcodes = await barcodeDetector.detect(video);
+                                if (barcodes.length > 0) {
+                                    const code = barcodes[0].rawValue;
+                                    if (code && lastResult !== code) {
+                                        lastResult = code;
+                                        handleScanSuccess(code);
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("Tarama hatası:", e);
+                            }
+                        }
+                    }, 100); // 100 ms'de bir (Saniyede 10 tarama) çok hızlı analiz yapar
+                });
+            } catch (err) {
+                alert("Kamera izni veya erişim hatası: " + err.message);
+            }
+        }
 
+        function handleScanSuccess(decodedText) {
+            document.getElementById('result-text').innerText = decodedText;
+            let actionArea = document.getElementById('action-area');
+            actionArea.innerHTML = ''; 
+
+            if (navigator.vibrate) navigator.vibrate(100); // Başarılı okumada hafif titreşim
+
+            if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+                let linkBtn = document.createElement('a');
+                linkBtn.href = decodedText;
+                linkBtn.target = '_blank';
+                linkBtn.className = 'btn-action';
+                linkBtn.innerText = 'Bağlantıyı Aç';
+                actionArea.appendChild(linkBtn);
+            } else {
                 let searchBtn = document.createElement('a');
-                searchBtn.href = "https://google.com" + encodeURIComponent(code);
+                searchBtn.href = "https://google.com" + encodeURIComponent(decodedText);
                 searchBtn.target = '_blank';
                 searchBtn.className = 'btn-action';
                 searchBtn.innerText = "Google'da Ara";
                 actionArea.appendChild(searchBtn);
-            });
+            }
         }
 
-        window.addEventListener('DOMContentLoaded', startQuagga);
+        window.addEventListener('DOMContentLoaded', initScanner);
     </script>
 </body>
 </html>
