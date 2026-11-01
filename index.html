@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mobil Barkod & QR Okuyucu</title>
-    <!-- GÜNCEL VE KARARLI KÜTÜPHANE SÜRÜMÜ -->
+    <!-- GÜNCEL KÜTÜPHANE -->
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -116,15 +116,19 @@
             }
         }
 
-        // Doğrudan kamerayı zorlayan yeni mekanizma
         const html5QrCode = new Html5Qrcode("reader");
         const config = { fps: 10, qrbox: { width: 250, height: 150 } };
 
-        // Arka kamerayı ("environment") açması için zorla
+        // Akıllı Kamera Seçimi: Önce arka kamerayı dene, olmazsa mevcut herhangi bir kamerayı aç
         html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
         .catch(err => {
-            console.error("Kamera başlatılamadı: ", err);
-            document.getElementById('reader').innerText = "Kamera izni reddedildi veya kamera bulunamadı.";
+            console.log("Arka kamera bulunamadı veya izin verilmedi, herhangi bir kamera deneniyor...", err);
+            // Eğer arka kamera yoksa (Bilgisayardaysanız) varsayılan web kamerasını açar
+            html5QrCode.start({ facingMode: "user" }, config, onScanSuccess)
+            .catch(err2 => {
+                document.getElementById('reader').innerText = "Kamera izni reddedildi veya kameraya ulaşılamadı. Lütfen adres çubuğundaki kilit simgesinden kamera iznini kontrol edin.";
+                console.error("Kamera tamamen başarısız: ", err2);
+            });
         });
     </script>
 </body>
