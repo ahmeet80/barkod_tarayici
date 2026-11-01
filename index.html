@@ -1,11 +1,10 @@
-html
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mobil Barkod & QR Okuyucu</title>
-    <!-- DOĞRU KAMERA TARAMA KÜTÜPHANESİ (cdnjs üzerinden html5-qrcode) -->
+    <!-- GÜNCEL VE KARARLI KÜTÜPHANE SÜRÜMÜ -->
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -30,12 +29,15 @@ html
         #reader {
             width: 100%;
             max-width: 450px;
-            background: white;
-            padding: 10px;
+            min-height: 250px;
+            background: #e9ecef;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             overflow: hidden;
             box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         #result-container {
             margin-top: 20px;
@@ -82,7 +84,7 @@ html
     <p>Barkodu veya QR kodu kameraya ortalayacak şekilde hizalayın.</p>
 
     <!-- Kamera Önizleme Alanı -->
-    <div id="reader"></div>
+    <div id="reader">Kamera başlatılıyor...</div>
 
     <!-- Sonuçların Gösterileceği Alan -->
     <div id="result-container">
@@ -95,7 +97,7 @@ html
         function onScanSuccess(decodedText, decodedResult) {
             document.getElementById('result-text').innerText = decodedText;
             let actionArea = document.getElementById('action-area');
-            actionArea.innerHTML = ''; // Eski butonu temizle
+            actionArea.innerHTML = ''; 
 
             if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
                 let linkBtn = document.createElement('a');
@@ -106,7 +108,6 @@ html
                 actionArea.appendChild(linkBtn);
             } else {
                 let searchBtn = document.createElement('a');
-                // URL Yazım hatası düzeltildi
                 searchBtn.href = "https://google.com" + encodeURIComponent(decodedText);
                 searchBtn.target = '_blank';
                 searchBtn.className = 'btn-action';
@@ -115,21 +116,16 @@ html
             }
         }
 
-        function onScanFailure(error) {
-            // Hataları konsolda çok kalabalık yapmaması için burayı boş bırakabilir veya izleyebilirsiniz
-            console.warn("Tarama hatası: " + error);
-        }
+        // Doğrudan kamerayı zorlayan yeni mekanizma
+        const html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
 
-        let html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", 
-            { 
-                fps: 10, 
-                qrbox: { width: 250, height: 150 },
-                rememberLastUsedCamera: true
-            }, 
-            /* verbose= */ false
-        );
-        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        // Arka kamerayı ("environment") açması için zorla
+        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+        .catch(err => {
+            console.error("Kamera başlatılamadı: ", err);
+            document.getElementById('reader').innerText = "Kamera izni reddedildi veya kamera bulunamadı.";
+        });
     </script>
 </body>
 </html>
