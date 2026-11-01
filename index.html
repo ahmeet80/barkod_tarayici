@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kesin Çözüm Barkod Tarayıcı</title>
-    <!-- Tarama kütüphanesi -->
+    <title>Çizgili Barkod Okuyucu</title>
+    <!-- Gelişmiş Çizgili Barkod Tarama Kütüphanesi -->
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -19,7 +19,7 @@
         }
         h2 { color: #2c3e50; margin-bottom: 5px; }
         p { color: #7f8c8d; font-size: 14px; margin-top: 0; text-align: center; }
-        #video-container {
+        #interactive {
             width: 100%;
             max-width: 450px;
             background: #000;
@@ -28,10 +28,19 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             position: relative;
         }
-        video {
+        /* Kütüphanenin oluşturduğu video elementini tam oturt */
+        #interactive video {
             width: 100%;
             height: auto;
             display: block;
+        }
+        /* Kütüphanenin oluşturduğu ekstra tuvali gizle */
+        #interactive canvas.drawingBuffer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
         }
         #result-container {
             margin-top: 20px;
@@ -66,109 +75,104 @@
             border-radius: 6px;
             font-size: 14px;
         }
-        /* Ekranda barkodu nereye tutacağınızı gösteren kılavuz çizgi */
-        .scanner-laser {
+        /* Barkod hizalama kılavuzu */
+        .scan-target {
             position: absolute;
             top: 50%;
             left: 5%;
             width: 90%;
             height: 2px;
-            background: red;
-            opacity: 0.7;
-            box-shadow: 0 0 8px red;
+            background: #e74c3c;
+            box-shadow: 0 0 8px #e74c3c;
+            transform: translateY(-50%);
+            z-index: 10;
         }
     </style>
 </head>
 <body>
 
     <h2>Barkod Tarayıcı</h2>
-    <p>Barkodu kırmızı çizgiye gelecek şekilde kameraya hizalayın.</p>
+    <p>Ürün barkodunu yatay olacak şekilde kırmızı çizgiye hizalayın.</p>
 
-    <!-- Telefonunuzun Kesin Açılan Kamera Yapısı -->
-    <div id="video-container">
-        <video id="webcam" autoplay playsinline></video>
-        <div class="scanner-laser"></div>
+    <!-- Kamera Alanı -->
+    <div id="interactive" class="viewport">
+        <div class="scan-target"></div>
     </div>
 
     <!-- Sonuç Alanı -->
     <div id="result-container">
-        <div class="result-title">🟢 Okunan Sonuç:</div>
+        <div class="result-title">🟢 Okunan Barkod No:</div>
         <div id="result-text">Henüz tarama yapılmadı...</div>
         <div id="action-area"></div>
     </div>
 
-    <!-- Arka planda analiz için gizli tuval -->
-    <canvas id="hidden-canvas" style="display:none;"></canvas>
-
     <script>
-        let html5QrCodeLocal;
-        let scanInterval;
+        // Aynı kodun üst üste okunmasını engellemek için son okunanı tutuyoruz
+        let lastResult = null;
 
-        function onScanSuccess(decodedText) {
-            document.getElementById('result-text').innerText = decodedText;
-            let actionArea = document.getElementById('action-area');
-            actionArea.innerHTML = ''; 
+        function startQuagga() {
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#interactive'),
+                    constraints: {
+                        width: 640,
+                        height: 480,
+                        facingMode: "environment" // Kesinlikle arka kamera
+                    },
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                // Türkiye ve dünyadaki tüm standart market/ürün barkod türleri (EAN, UPC, Code128)
+                decoder: {
+                    readers: [
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_128_reader",
+                        "upc_reader",
+                        "upc_e_reader"
+                    ]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error("Başlatma hatası:", err);
+                    return;
+                }
+                console.log("Barkod motoru hazır, tarama başlıyor...");
+                Quagga.start();
+            });
 
-            if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-                let linkBtn = document.createElement('a');
-                linkBtn.href = decodedText;
-                linkBtn.target = '_blank';
-                linkBtn.className = 'btn-action';
-                linkBtn.innerText = 'Bağlantıyı Aç';
-                actionArea.appendChild(linkBtn);
-            } else {
+            // Barkod başarıyla tespit edildiğinde çalışacak fonksiyon
+            Quagga.onDetected(function(result) {
+                let code = result.codeResult.code;
+                
+                // Hatalı veya kaymış okumaları önlemek için kontrol
+                if (!code || lastResult === code) return;
+                
+                lastResult = code;
+                document.getElementById('result-text').innerText = code;
+                
+                // Sesli geri bildirim efekti (Bip sesi) alternatifi
+                if (navigator.vibrate) navigator.vibrate(100);
+
+                let actionArea = document.getElementById('action-area');
+                actionArea.innerHTML = ''; 
+
                 let searchBtn = document.createElement('a');
-                searchBtn.href = "https://google.com" + encodeURIComponent(decodedText);
+                searchBtn.href = "https://google.com" + encodeURIComponent(code);
                 searchBtn.target = '_blank';
                 searchBtn.className = 'btn-action';
                 searchBtn.innerText = "Google'da Ara";
                 actionArea.appendChild(searchBtn);
-            }
+            });
         }
 
-        async function startEngine() {
-            const video = document.getElementById('webcam');
-            
-            try {
-                // 1. Adım: Kamerayı saf HTML motoruyla çalıştır
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment" }
-                });
-                video.srcObject = stream;
-
-                // 2. Adım: Tarayıcı motorunu arka planda hazırla
-                html5QrCodeLocal = new Html5Qrcode("hidden-canvas", { verbose: false });
-
-                // 3. Adım: Saniyede 5 kez kameradan kare yakalayıp tarama kütüphanesine gönder
-                video.addEventListener('playing', () => {
-                    const canvas = document.getElementById('hidden-canvas');
-                    const context = canvas.getContext('2d');
-
-                    scanInterval = setInterval(() => {
-                        if (video.videoWidth > 0 && video.videoHeight > 0) {
-                            canvas.width = video.videoWidth;
-                            canvas.height = video.videoHeight;
-                            // Videonun anlık karesini gizli canvas'a çiz
-                            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                            
-                            // Çizilen kareyi kütüphaneye taratması için gönder
-                            html5QrCodeLocal.scanLocalImage(canvas)
-                                .then(decodedText => {
-                                    onScanSuccess(decodedText);
-                                })
-                                .catch(err => {
-                                    // Kod bulunamadığında hata basmaması için burayı boş bırakıyoruz
-                                });
-                        }
-                    }, 200); // 200 milisaniyede bir (Saniyede 5 kare) tarama yapar
-                });
-
-            } catch (err) {
-                alert("Kamera başlatılamadı. Lütfen Chrome izinlerini kontrol edin: " + err.message);
-            }
-        }
-
-        window.addEventListener('DOMContentLoaded', startEngine);
+        window.addEventListener('DOMContentLoaded', startQuagga);
     </script>
 </body>
 </html>
