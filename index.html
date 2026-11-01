@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mobil Barkod & QR Okuyucu</title>
-    <!-- GÜNCEL KÜTÜPHANE -->
-    <script src="https://cloudflare.com"></script>
+    <!-- ALTERNATİF VE EN KARARLI SÜRÜM -->
+    <script src="https://unpkg.com"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -38,6 +38,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 15px;
+            text-align: center;
         }
         #result-container {
             margin-top: 20px;
@@ -84,7 +86,7 @@
     <p>Barkodu veya QR kodu kameraya ortalayacak şekilde hizalayın.</p>
 
     <!-- Kamera Önizleme Alanı -->
-    <div id="reader">Kamera başlatılıyor...</div>
+    <div id="reader">Kamera izinleri kontrol ediliyor...</div>
 
     <!-- Sonuçların Gösterileceği Alan -->
     <div id="result-container">
@@ -116,20 +118,32 @@
             }
         }
 
-        const html5QrCode = new Html5Qrcode("reader");
-        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+        // Kamera başlatma fonksiyonu
+        function startCamera() {
+            const html5QrCode = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 150 } };
 
-        // Akıllı Kamera Seçimi: Önce arka kamerayı dene, olmazsa mevcut herhangi bir kamerayı aç
-        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-        .catch(err => {
-            console.log("Arka kamera bulunamadı veya izin verilmedi, herhangi bir kamera deneniyor...", err);
-            // Eğer arka kamera yoksa (Bilgisayardaysanız) varsayılan web kamerasını açar
-            html5QrCode.start({ facingMode: "user" }, config, onScanSuccess)
-            .catch(err2 => {
-                document.getElementById('reader').innerText = "Kamera izni reddedildi veya kameraya ulaşılamadı. Lütfen adres çubuğundaki kilit simgesinden kamera iznini kontrol edin.";
-                console.error("Kamera tamamen başarısız: ", err2);
+            // Cihazdaki kameraları tara
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    // Arka kamerayı bulmaya çalış
+                    let rearCamera = devices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('ark'));
+                    let cameraId = rearCamera ? rearCamera.id : devices[0].id;
+
+                    html5QrCode.start(cameraId, config, onScanSuccess)
+                    .catch(err => {
+                        document.getElementById('reader').innerHTML = "<b>Kamera Başlatma Hatası:</b><br>" + err;
+                    });
+                } else {
+                    document.getElementById('reader').innerText = "Cihazda kamera bulunamadı.";
+                }
+            }).catch(err => {
+                document.getElementById('reader').innerHTML = "<b>Kamera İzin Hatası:</b><br>" + err + "<br><br>Lütfen tarayıcı ayarlarından kamera izni verdiğinizden emin olun.";
             });
-        });
+        }
+
+        // Sayfa tamamen yüklendiğinde kamerayı başlat
+        window.addEventListener('DOMContentLoaded', startCamera);
     </script>
 </body>
 </html>
