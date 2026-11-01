@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kararlı Mobil Barkod Okuyucu</title>
-    <!-- Stabil Kütüphane Bağlantısı -->
+    <title>Kesin Çözüm Barkod Tarayıcı</title>
+    <!-- Tarama kütüphanesi -->
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -19,15 +19,19 @@
         }
         h2 { color: #2c3e50; margin-bottom: 5px; }
         p { color: #7f8c8d; font-size: 14px; margin-top: 0; text-align: center; }
-        #reader {
+        #video-container {
             width: 100%;
             max-width: 450px;
-            min-height: 300px;
             background: #000;
             border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             overflow: hidden;
-            box-sizing: border-box;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            position: relative;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
         }
         #result-container {
             margin-top: 20px;
@@ -61,17 +65,30 @@
             text-decoration: none;
             border-radius: 6px;
             font-size: 14px;
-            text-align: center;
+        }
+        /* Ekranda barkodu nereye tutacağınızı gösteren kılavuz çizgi */
+        .scanner-laser {
+            position: absolute;
+            top: 50%;
+            left: 5%;
+            width: 90%;
+            height: 2px;
+            background: red;
+            opacity: 0.7;
+            box-shadow: 0 0 8px red;
         }
     </style>
 </head>
 <body>
 
     <h2>Barkod Tarayıcı</h2>
-    <p>Kodu ekranın ortasındaki kutucuğa hizalayın.</p>
+    <p>Barkodu kırmızı çizgiye gelecek şekilde kameraya hizalayın.</p>
 
-    <!-- Entegre Kamera ve Tarama Alanı -->
-    <div id="reader"></div>
+    <!-- Telefonunuzun Kesin Açılan Kamera Yapısı -->
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
+        <div class="scanner-laser"></div>
+    </div>
 
     <!-- Sonuç Alanı -->
     <div id="result-container">
@@ -80,8 +97,14 @@
         <div id="action-area"></div>
     </div>
 
+    <!-- Arka planda analiz için gizli tuval -->
+    <canvas id="hidden-canvas" style="display:none;"></canvas>
+
     <script>
-        function onScanSuccess(decodedText, decodedResult) {
+        let html5QrCodeLocal;
+        let scanInterval;
+
+        function onScanSuccess(decodedText) {
             document.getElementById('result-text').innerText = decodedText;
             let actionArea = document.getElementById('action-area');
             actionArea.innerHTML = ''; 
@@ -103,36 +126,49 @@
             }
         }
 
-        function startScanner() {
-            // Xiaomi donanım çakışmasını engelle
-            Html5Qrcode.prototype.useBarCodeDetectorIfSupported = function() { return false; };
-
-            const html5QrCode = new Html5Qrcode("reader");
+        async function startEngine() {
+            const video = document.getElementById('webcam');
             
-            // Çizgi barkodlar ve QR kodlar için optimize edilmiş tarama odağı ayarları
-            const config = { 
-                fps: 15, 
-                qrbox: function(viewfinderWidth, viewfinderHeight) {
-                    // Ekran genişliğine göre dinamik odak kutusu (Çizgi barkodları rahat yakalaması için yatay)
-                    let minEdgePercentage = 0.7;
-                    let boxWidth = Math.floor(viewfinderWidth * minEdgePercentage);
-                    if (boxWidth < 250) boxWidth = 250;
-                    return { width: boxWidth, height: 180 };
-                }
-            };
+            try {
+                // 1. Adım: Kamerayı saf HTML motoruyla çalıştır
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }
+                });
+                video.srcObject = stream;
 
-            // Önceki adımda test ettiğimiz kesin çalışan başlatma komutu
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                config, 
-                onScanSuccess
-            ).catch(err => {
-                console.error("Tarayıcı başlatılamadı:", err);
-            });
+                // 2. Adım: Tarayıcı motorunu arka planda hazırla
+                html5QrCodeLocal = new Html5Qrcode("hidden-canvas", { verbose: false });
+
+                // 3. Adım: Saniyede 5 kez kameradan kare yakalayıp tarama kütüphanesine gönder
+                video.addEventListener('playing', () => {
+                    const canvas = document.getElementById('hidden-canvas');
+                    const context = canvas.getContext('2d');
+
+                    scanInterval = setInterval(() => {
+                        if (video.videoWidth > 0 && video.videoHeight > 0) {
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            // Videonun anlık karesini gizli canvas'a çiz
+                            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            
+                            // Çizilen kareyi kütüphaneye taratması için gönder
+                            html5QrCodeLocal.scanLocalImage(canvas)
+                                .then(decodedText => {
+                                    onScanSuccess(decodedText);
+                                })
+                                .catch(err => {
+                                    // Kod bulunamadığında hata basmaması için burayı boş bırakıyoruz
+                                });
+                        }
+                    }, 200); // 200 milisaniyede bir (Saniyede 5 kare) tarama yapar
+                });
+
+            } catch (err) {
+                alert("Kamera başlatılamadı. Lütfen Chrome izinlerini kontrol edin: " + err.message);
+            }
         }
 
-        // Sayfa açıldığında tarayıcıyı tetikle
-        window.addEventListener('DOMContentLoaded', startScanner);
+        window.addEventListener('DOMContentLoaded', startEngine);
     </script>
 </body>
 </html>
