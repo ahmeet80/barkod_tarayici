@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mobil Barkod & QR Okuyucu</title>
-    <!-- ALTERNATİF VE EN KARARLI SÜRÜM -->
+    <title>Xiaomi HyperOS Kararlı Barkod Okuyucu</title>
+    <!-- Kararlı çalışan son kütüphane yapısı -->
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -17,19 +17,12 @@
             flex-direction: column;
             align-items: center;
         }
-        h2 {
-            color: #2c3e50;
-            margin-bottom: 5px;
-        }
-        p {
-            color: #7f8c8d;
-            font-size: 14px;
-            margin-top: 0;
-        }
+        h2 { color: #2c3e50; margin-bottom: 5px; }
+        p { color: #7f8c8d; font-size: 14px; margin-top: 0; }
         #reader {
             width: 100%;
             max-width: 450px;
-            min-height: 250px;
+            min-height: 280px;
             background: #e9ecef;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -55,9 +48,6 @@
             font-weight: bold;
             color: #27ae60;
             margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
         }
         #result-text {
             word-break: break-all;
@@ -76,7 +66,6 @@
             text-decoration: none;
             border-radius: 6px;
             font-size: 14px;
-            text-align: center;
         }
     </style>
 </head>
@@ -86,7 +75,7 @@
     <p>Barkodu veya QR kodu kameraya ortalayacak şekilde hizalayın.</p>
 
     <!-- Kamera Önizleme Alanı -->
-    <div id="reader">Kamera izinleri kontrol ediliyor...</div>
+    <div id="reader">Kamera sistemi başlatılıyor...</div>
 
     <!-- Sonuçların Gösterileceği Alan -->
     <div id="result-container">
@@ -118,32 +107,32 @@
             }
         }
 
-        // Kamera başlatma fonksiyonu
-        function startCamera() {
+        function initXiaomiScanner() {
+            // HyperOS/Samsung kütüphane çakışmasını önleyen kritik ayar
+            Html5Qrcode.prototype.useBarCodeDetectorIfSupported = function() { return false; };
+            
             const html5QrCode = new Html5Qrcode("reader");
-            const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+            const config = { fps: 15, qrbox: { width: 260, height: 160 } };
 
-            // Cihazdaki kameraları tara
-            Html5Qrcode.getCameras().then(devices => {
-                if (devices && devices.length) {
-                    // Arka kamerayı bulmaya çalış
-                    let rearCamera = devices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('ark'));
-                    let cameraId = rearCamera ? rearCamera.id : devices[0].id;
-
-                    html5QrCode.start(cameraId, config, onScanSuccess)
-                    .catch(err => {
-                        document.getElementById('reader').innerHTML = "<b>Kamera Başlatma Hatası:</b><br>" + err;
-                    });
-                } else {
-                    document.getElementById('reader').innerText = "Cihazda kamera bulunamadı.";
-                }
-            }).catch(err => {
-                document.getElementById('reader').innerHTML = "<b>Kamera İzin Hatası:</b><br>" + err + "<br><br>Lütfen tarayıcı ayarlarından kamera izni verdiğinizden emin olun.";
+            // Cihaz tarama yapmadan doğrudan tarayıcı seviyesinde arka kamerayı zorluyoruz
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config, 
+                onScanSuccess
+            ).catch(err => {
+                console.log("Arka kamera zorlaması başarısız, genel mod deneniyor...", err);
+                // Yedek plan: Kullanıcı izin istemini doğrudan tetikle
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(stream => {
+                    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+                })
+                .catch(err2 => {
+                    document.getElementById('reader').innerHTML = "<b>Bağlantı Hatası</b><br>Lütfen linki WhatsApp içinden değil, doğrudan Chrome tarayıcısından açtığınızdan emin olun.";
+                });
             });
         }
 
-        // Sayfa tamamen yüklendiğinde kamerayı başlat
-        window.addEventListener('DOMContentLoaded', startCamera);
+        window.addEventListener('DOMContentLoaded', initXiaomiScanner);
     </script>
 </body>
 </html>
